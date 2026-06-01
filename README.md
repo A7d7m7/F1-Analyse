@@ -44,10 +44,6 @@ Puis ouvrir l'URL affichee par Streamlit, en general :
 http://localhost:8501
 ```
 
-## Idee CV
-
-**F1 Race Strategy Analytics** - Dashboard Python/Streamlit d'analyse de performance Formule 1 base sur FastF1 : extraction de donnees de timing et telemetrie, analyse du rythme de course, strategie pneus, pit stops, ecarts cumules et visualisations interactives.
-
 ## Structure
 
 ```text

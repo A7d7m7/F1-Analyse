@@ -8,11 +8,23 @@ from f1_analysis.config import COMPOUND_COLORS, DRIVER_COLORS
 from f1_analysis.metrics import cumulative_gap, prepare_laps
 
 
-PLOT_TEMPLATE = "plotly_white"
+PLOT_TEMPLATE = "plotly_dark"
 
 
 def _driver_color(driver: str) -> str:
-    return DRIVER_COLORS.get(driver, "#111827")
+    return DRIVER_COLORS.get(driver, "#aabbcc")
+
+
+def driver_colors(frame, drivers):
+    import re
+    colors = {}
+    team_palette = {"Red Bull Racing": "#3671C6", "Ferrari": "#E8002D", "McLaren": "#FF8000", "Mercedes": "#27F4D2"}
+    for driver in drivers:
+        rows = frame[frame.Driver.eq(driver)]
+        color = str(rows.TeamColor.dropna().iloc[0]).lstrip("#") if "TeamColor" in rows and rows.TeamColor.notna().any() else ""
+        team = rows.Team.iloc[0] if "Team" in rows and len(rows) else ""
+        colors[driver] = "#" + color if re.fullmatch(r"[0-9a-fA-F]{6}", color) else team_palette.get(team, _driver_color(driver))
+    return colors
 
 
 def plot_lap_times(laps: pd.DataFrame, drivers: list[str]) -> go.Figure:
@@ -23,7 +35,7 @@ def plot_lap_times(laps: pd.DataFrame, drivers: list[str]) -> go.Figure:
         x="LapNumber",
         y="LapTimeSeconds",
         color="Driver",
-        color_discrete_map={driver: _driver_color(driver) for driver in drivers},
+        color_discrete_map=driver_colors(laps, drivers),
         markers=True,
         template=PLOT_TEMPLATE,
         labels={"LapNumber": "Lap", "LapTimeSeconds": "Temps au tour (s)"},
@@ -46,13 +58,13 @@ def plot_lap_times(laps: pd.DataFrame, drivers: list[str]) -> go.Figure:
 
 def plot_rolling_pace(laps: pd.DataFrame, drivers: list[str]) -> go.Figure:
     frame = prepare_laps(laps)
-    frame = frame[frame["Driver"].isin(drivers)]
+    frame = frame[frame["Driver"].isin(drivers) & frame["IsPaceLap"]]
     fig = px.line(
         frame,
         x="LapNumber",
         y="RollingPace3",
         color="Driver",
-        color_discrete_map={driver: _driver_color(driver) for driver in drivers},
+        color_discrete_map=driver_colors(laps, drivers),
         template=PLOT_TEMPLATE,
         labels={"LapNumber": "Lap", "RollingPace3": "Rythme median 3 tours (s)"},
     )
@@ -68,7 +80,7 @@ def plot_cumulative_gap(laps: pd.DataFrame, drivers: list[str], reference_driver
         x="LapNumber",
         y="GapSeconds",
         color="Driver",
-        color_discrete_map={driver: _driver_color(driver) for driver in drivers},
+        color_discrete_map=driver_colors(laps, drivers),
         template=PLOT_TEMPLATE,
         labels={"LapNumber": "Lap", "GapSeconds": f"Ecart vs {reference_driver} (s)"},
     )
@@ -126,6 +138,7 @@ def plot_strategy(laps: pd.DataFrame, drivers: list[str]) -> go.Figure:
 def plot_sector_box(laps: pd.DataFrame, drivers: list[str]) -> go.Figure:
     frame = prepare_laps(laps)
     frame = frame[frame["Driver"].isin(drivers)]
+    frame = frame[frame["IsCleanLap"]]
     sectors = frame.melt(
         id_vars=["Driver", "LapNumber"],
         value_vars=[column for column in ["Sector1Seconds", "Sector2Seconds", "Sector3Seconds"] if column in frame],
@@ -138,7 +151,7 @@ def plot_sector_box(laps: pd.DataFrame, drivers: list[str]) -> go.Figure:
         x="Sector",
         y="Seconds",
         color="Driver",
-        color_discrete_map={driver: _driver_color(driver) for driver in drivers},
+        color_discrete_map=driver_colors(laps, drivers),
         template=PLOT_TEMPLATE,
         labels={"Seconds": "Temps (s)"},
     )
@@ -153,9 +166,11 @@ def plot_telemetry(telemetry: pd.DataFrame, drivers: list[str], metric: str) -> 
         x="Distance",
         y=metric,
         color="Driver",
-        color_discrete_map={driver: _driver_color(driver) for driver in drivers},
+        color_discrete_map=driver_colors(telemetry, drivers),
         template=PLOT_TEMPLATE,
-        labels={"Distance": "Distance (m)", metric: metric},
+        labels={"Distance": "Distance (m)", metric: {"Speed": "Vitesse (km/h)", "Throttle": "Accélérateur (%)", "Brake": "Frein actif (0/1)", "RPM": "Régime (tr/min)", "nGear": "Rapport", "DRS": "Code DRS"}.get(metric, metric)},
     )
+    if metric == "Brake" and not frame.empty and pd.to_numeric(frame["Brake"]).max() > 1:
+        fig.update_yaxes(title="Frein synthétique (%)")
     fig.update_layout(height=430, legend_title_text="", margin=dict(l=10, r=10, t=30, b=10))
     return fig

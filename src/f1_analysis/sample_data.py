@@ -66,8 +66,11 @@ def build_demo_laps(
                     "Sector1Seconds": round(float(sector1), 3),
                     "Sector2Seconds": round(float(sector2), 3),
                     "Sector3Seconds": round(float(sector3), 3),
-                    "IsPitLap": lap in stops,
+                    "IsPitLap": lap in stops or lap - 1 in stops,
                     "IsAccurate": True,
+                    "TrackStatus": "4" if 30 <= lap <= 32 else "1",
+                    "IsPitInLap": lap in stops,
+                    "IsPitOutLap": lap - 1 in stops,
                 }
             )
 
@@ -117,7 +120,10 @@ def build_demo_telemetry(seed: int = 11) -> pd.DataFrame:
                 }
             )
 
-    return pd.DataFrame(rows)
+    frame = pd.DataFrame(rows)
+    frame["ElapsedSeconds"] = frame.groupby("Driver")["Distance"].diff().fillna(0) / (frame["Speed"] / 3.6)
+    frame["ElapsedSeconds"] = frame.groupby("Driver")["ElapsedSeconds"].cumsum()
+    return frame
 
 
 def load_demo_dataset(
